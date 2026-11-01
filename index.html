@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QR Generator</title>
+
+  <!-- Google AdSense -->
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3883545893368752" crossorigin="anonymous"></script>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+
+  <!-- QRCode.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+  <!-- Google Fonts: Space Grotesk -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Space Grotesk', 'sans-serif'] },
+          colors: {
+            ink:    '#0F0F11',
+            paper:  '#F7F7F5',
+            mid:    '#9B9B9B',
+            accent: '#5B5BD6',
+            'accent-light': '#EEEEFF',
+          },
+          borderRadius: { xl: '1rem', '2xl': '1.5rem' },
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* Base */
+    *, *::before, *::after { box-sizing: border-box; }
+    body { font-family: 'Space Grotesk', sans-serif; background: #F7F7F5; color: #0F0F11; }
+
+    /* Canvas QR override */
+    #qr-output canvas,
+    #qr-output img { display: block; margin: auto; }
+
+    /* Textarea focus ring */
+    textarea:focus { outline: none; box-shadow: 0 0 0 2px #5B5BD6; }
+
+    /* Animated border on card */
+    .qr-card { transition: box-shadow 0.2s ease; }
+    .qr-card:focus-within { box-shadow: 0 0 0 2px #5B5BD6, 0 8px 40px rgba(91,91,214,0.10); }
+
+    /* Button states */
+    .btn-primary { transition: background 0.15s, transform 0.1s; }
+    .btn-primary:hover { background: #4a4ac0; }
+    .btn-primary:active { transform: scale(0.98); }
+    .btn-secondary { transition: background 0.15s, border-color 0.15s, transform 0.1s; }
+    .btn-secondary:hover { background: #EEEEFF; border-color: #5B5BD6; }
+    .btn-secondary:active { transform: scale(0.98); }
+
+    /* QR result fade-in */
+    #result-area { transition: opacity 0.3s ease; }
+    #result-area.hidden { opacity: 0; pointer-events: none; }
+    #result-area.visible { opacity: 1; pointer-events: auto; }
+
+    /* Cookie banner */
+    #cookie-banner {
+      position: fixed; left: 50%; bottom: 16px; z-index: 50;
+      width: calc(100% - 32px); max-width: 560px;
+      transform: translate(-50%, 0);
+      background: #fff; border: 1px solid #e5e7eb; border-radius: 1rem;
+      box-shadow: 0 8px 40px rgba(15,15,17,0.12);
+      padding: 16px 18px;
+      display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px;
+      animation: cookie-in .3s ease;
+    }
+    #cookie-banner[hidden] { display: none; }
+    #cookie-banner p { flex: 1 1 260px; font-size: 12.5px; line-height: 1.5; margin: 0; }
+    #cookie-banner a, .link-btn { color: #5B5BD6; text-decoration: underline; background: none; border: 0; padding: 0; cursor: pointer; font: inherit; }
+    @keyframes cookie-in { from { opacity: 0; transform: translate(-50%, 12px); } to { opacity: 1; transform: translate(-50%, 0); } }
+
+    /* Privacy modal */
+    #privacy-modal {
+      border: 0; border-radius: 1.25rem; padding: 0;
+      width: calc(100% - 32px); max-width: 560px; max-height: 85vh;
+      box-shadow: 0 20px 60px rgba(15,15,17,0.25); color: #0F0F11;
+    }
+    #privacy-modal::backdrop { background: rgba(15,15,17,0.45); backdrop-filter: blur(2px); }
+    #privacy-modal .body { padding: 24px 28px; font-size: 14px; line-height: 1.6; overflow-y: auto; max-height: 85vh; }
+    #privacy-modal h2 { font-size: 20px; font-weight: 700; margin: 0 0 4px; }
+    #privacy-modal h3 { font-size: 14px; font-weight: 600; margin: 18px 0 4px; }
+    #privacy-modal p, #privacy-modal ul { margin: 0; color: #444; }
+    #privacy-modal ul { padding-left: 18px; list-style: disc; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .btn-primary, .btn-secondary, #result-area { transition: none; }
+      #cookie-banner { animation: none; }
+    }
+  </style>
+</head>
+
+<body class="min-h-screen flex flex-col items-center justify-center px-4 py-12">
+
+  <!-- Header -->
+  <header class="w-full max-w-md mb-8 text-center">
+    <div class="inline-flex items-center gap-2 mb-3">
+      <!-- QR icon -->
+      <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect x="2" y="2" width="10" height="10" rx="1.5" stroke="#5B5BD6" stroke-width="2"/>
+        <rect x="5" y="5" width="4" height="4" rx="0.5" fill="#5B5BD6"/>
+        <rect x="16" y="2" width="10" height="10" rx="1.5" stroke="#5B5BD6" stroke-width="2"/>
+        <rect x="19" y="5" width="4" height="4" rx="0.5" fill="#5B5BD6"/>
+        <rect x="2" y="16" width="10" height="10" rx="1.5" stroke="#5B5BD6" stroke-width="2"/>
+        <rect x="5" y="19" width="4" height="4" rx="0.5" fill="#5B5BD6"/>
+        <rect x="16" y="16" width="4" height="4" rx="0.5" fill="#0F0F11"/>
+        <rect x="22" y="16" width="4" height="4" rx="0.5" fill="#0F0F11"/>
+        <rect x="16" y="22" width="4" height="4" rx="0.5" fill="#0F0F11"/>
+        <rect x="22" y="22" width="4" height="4" rx="0.5" fill="#0F0F11"/>
+      </svg>
+      <span class="text-xs font-medium tracking-widest text-mid uppercase">Generador</span>
+    </div>
+    <h1 class="text-3xl font-700 leading-tight tracking-tight" style="font-weight:700;">Código QR</h1>
+    <p class="mt-2 text-mid text-sm">Escribe una URL o texto y genera tu QR en segundos.</p>
+  </header>
+
+  <!-- Main card -->
+  <main class="w-full max-w-md">
+    <div class="qr-card bg-white rounded-2xl border border-gray-200 shadow-sm p-6 md:p-8 space-y-5">
+
+      <!-- Input -->
+      <div>
+        <label for="qr-input" class="block text-sm font-medium mb-2">URL o texto</label>
+        <textarea
+          id="qr-input"
+          rows="3"
+          placeholder="https://ejemplo.com"
+          spellcheck="false"
+          class="w-full resize-none rounded-xl border border-gray-200 bg-paper px-4 py-3 text-sm leading-relaxed placeholder:text-mid"
+          aria-label="Contenido del código QR"
+        ></textarea>
+        <p id="char-count" class="mt-1 text-xs text-mid text-right">0 caracteres</p>
+      </div>
+
+      <!-- Size selector -->
+      <div class="flex items-center gap-3">
+        <label for="qr-size" class="text-sm font-medium whitespace-nowrap">Tamaño</label>
+        <select
+          id="qr-size"
+          class="flex-1 rounded-xl border border-gray-200 bg-paper px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+        >
+          <option value="160">Pequeño — 160 px</option>
+          <option value="240" selected>Mediano — 240 px</option>
+          <option value="320">Grande — 320 px</option>
+          <option value="480">Extra grande — 480 px</option>
+        </select>
+      </div>
+
+      <!-- Customize toggle -->
+      <div>
+        <button id="btn-custom" type="button" aria-expanded="false" aria-controls="custom-panel"
+          class="btn-secondary w-full flex items-center justify-center gap-2 border border-gray-200 rounded-xl py-2.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-accent">
+          Personalizar
+          <svg id="custom-chevron" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true" style="transition:transform .2s">
+            <path d="M2 4l4 4 4-4" stroke="#0F0F11" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <div id="custom-panel" class="hidden mt-4 space-y-4">
+          <div class="flex items-center gap-3">
+            <label for="qr-color" class="text-sm font-medium w-24">Color</label>
+            <input id="qr-color" type="color" value="#0F0F11" class="h-9 w-14 rounded-lg border border-gray-200 bg-paper cursor-pointer" />
+          </div>
+          <div>
+            <span class="block text-sm font-medium mb-2">Forma</span>
+            <div id="shape-options" class="grid grid-cols-4 gap-2" role="radiogroup" aria-label="Forma del QR"></div>
+          </div>
+          <button id="btn-reset" type="button" class="text-xs text-accent underline">Restablecer valores</button>
+        </div>
+      </div>
+
+      <!-- Generate button -->
+      <button
+        id="btn-generate"
+        class="btn-primary w-full bg-accent text-white rounded-xl py-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2"
+      >
+        Generar QR
+      </button>
+
+      <!-- Error msg -->
+      <p id="error-msg" class="hidden text-xs text-red-500 text-center -mt-2"></p>
+
+      <!-- Result area -->
+      <div id="result-area" class="hidden" aria-live="polite" aria-label="Resultado del QR">
+        <hr class="border-gray-100 my-1" />
+        <div id="qr-output" class="flex justify-center py-4"></div>
+        <button
+          id="btn-download"
+          class="btn-secondary mt-2 w-full flex items-center justify-center gap-2 border border-gray-200 rounded-xl py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2"
+        >
+          <!-- Download icon -->
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M8 2v8m0 0L5 7m3 3l3-3" stroke="#0F0F11" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M2 12h12" stroke="#0F0F11" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+          Descargar PNG
+        </button>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="mt-8 text-xs text-mid text-center">
+    <p>Privado — el código QR se genera en tu navegador, sin servidores.</p>
+    <p class="mt-2"><button type="button" id="open-privacy" class="link-btn">Política de Privacidad</button></p>
+  </footer>
+
+  <!-- Privacy modal -->
+  <dialog id="privacy-modal" aria-labelledby="privacy-title">
+    <div class="body">
+      <h2 id="privacy-title">Política de Privacidad</h2>
+      <p class="text-mid">Última actualización: noviembre de 2026</p>
+
+      <h3>Datos que tratamos</h3>
+      <p>El texto o la URL que introduces para generar el QR se procesa únicamente en tu navegador. No se envía ni se almacena en ningún servidor nuestro.</p>
+
+      <h3>Cookies propias</h3>
+      <p>Usamos almacenamiento local (<code>localStorage</code>) solo para recordar tu decisión sobre las cookies. No contiene datos personales.</p>
+
+      <h3>Cookies de terceros y Google AdSense</h3>
+      <p>Este sitio puede mostrar anuncios de Google AdSense. Google y sus socios publicitarios pueden usar cookies e identificadores para mostrar anuncios personalizados según tus visitas a este y otros sitios, y para medir su rendimiento.</p>
+      <ul class="mt-2">
+        <li>Puedes gestionar los anuncios personalizados en <a class="link-btn" href="https://adssettings.google.com" target="_blank" rel="noopener noreferrer">adssettings.google.com</a>.</li>
+        <li>Más información sobre cómo usa Google los datos: <a class="link-btn" href="https://policies.google.com/technologies/partner-sites" target="_blank" rel="noopener noreferrer">policies.google.com</a>.</li>
+      </ul>
+
+      <h3>Tus derechos (RGPD)</h3>
+      <p>Puedes acceder, rectificar o suprimir tus datos, oponerte a su tratamiento o retirar tu consentimiento en cualquier momento. Para retirar el consentimiento, borra los datos del sitio en tu navegador; el aviso volverá a aparecer.</p>
+
+      <h3>Base legal</h3>
+      <p>El uso de cookies no esenciales (publicidad) se basa en tu consentimiento.</p>
+
+      <button type="button" id="close-privacy" class="btn-primary mt-6 w-full bg-accent text-white rounded-xl py-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2">Cerrar</button>
+    </div>
+  </dialog>
+
+  <!-- Cookie banner -->
+  <div id="cookie-banner" role="region" aria-label="Aviso de cookies" hidden>
+    <p>Usamos cookies propias y de terceros (Google AdSense) para mostrar publicidad y mejorar tu experiencia. Consulta nuestra <button type="button" class="link-btn" id="cookie-privacy">Política de Privacidad</button>.</p>
+    <button type="button" id="cookie-accept" class="btn-primary bg-accent text-white rounded-xl px-6 py-2.5 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2">Aceptar</button>
+  </div>
+
+  <script>
+    // Cookie consent + privacy modal
+    (function () {
+      const KEY = 'cookie-consent';
+      const banner = document.getElementById('cookie-banner');
+      const modal = document.getElementById('privacy-modal');
+      let saved = null;
+      try { saved = localStorage.getItem(KEY); } catch (e) {}
+      banner.hidden = saved === 'accepted';
+
+      document.getElementById('cookie-accept').addEventListener('click', () => {
+        try { localStorage.setItem(KEY, 'accepted'); } catch (e) {}
+        banner.hidden = true;
+      });
+      const open = () => modal.showModal();
+      document.getElementById('open-privacy').addEventListener('click', open);
+      document.getElementById('cookie-privacy').addEventListener('click', open);
+      document.getElementById('close-privacy').addEventListener('click', () => modal.close());
+      modal.addEventListener('click', e => { if (e.target === modal) modal.close(); });
+    })();
+
+    const input      = document.getElementById('qr-input');
+    const sizeSelect = document.getElementById('qr-size');
+    const btnGen     = document.getElementById('btn-generate');
+    const btnDl      = document.getElementById('btn-download');
+    const output     = document.getElementById('qr-output');
+    const resultArea = document.getElementById('result-area');
+    const errorMsg   = document.getElementById('error-msg');
+    const charCount  = document.getElementById('char-count');
+
+    let qrInstance = null;
+
+    const btnCustom   = document.getElementById('btn-custom');
+    const customPanel = document.getElementById('custom-panel');
+    const colorInput  = document.getElementById('qr-color');
+    const shapeBox    = document.getElementById('shape-options');
+    const DEFAULT_COLOR = '#0F0F11';
+    const SHAPES = [
+      { id: 'square',  label: 'Normal' },
+      { id: 'soft',    label: 'Suave' },
+      { id: 'rounded', label: 'Redondeado' },
+      { id: 'dots',    label: 'Puntos' },
+    ];
+    let shape = 'square';
+
+    // Draws one module; also used by the small previews
+    function drawModule(ctx, shapeId, x, y, w, h) {
+      ctx.beginPath();
+      if (shapeId === 'dots') {
+        ctx.arc(x + w / 2, y + h / 2, Math.min(w, h) * 0.45, 0, Math.PI * 2);
+      } else {
+        const r = shapeId === 'rounded' ? Math.min(w, h) * 0.5 : shapeId === 'soft' ? Math.min(w, h) * 0.25 : 0;
+        if (r > 0 && ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h);
+      }
+      ctx.fill();
+    }
+
+    // Small sample of a 5x5 pattern for each shape option
+    const SAMPLE = ['11011', '10101', '01110', '10101', '11011'];
+    SHAPES.forEach(sh => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.dataset.shape = sh.id;
+      btn.setAttribute('role', 'radio');
+      btn.className = 'shape-opt flex flex-col items-center gap-1 rounded-xl border border-gray-200 bg-paper p-2 text-xs focus:outline-none focus:ring-2 focus:ring-accent';
+      const cv = document.createElement('canvas');
+      cv.width = cv.height = 100;
+      cv.style.width = cv.style.height = '40px';
+      cv.className = 'sample';
+      btn.append(cv, sh.label);
+      btn.addEventListener('click', () => { shape = sh.id; refreshShapes(); regenerate(); });
+      shapeBox.appendChild(btn);
+    });
+
+    function refreshShapes() {
+      shapeBox.querySelectorAll('.shape-opt').forEach(btn => {
+        const active = btn.dataset.shape === shape;
+        btn.setAttribute('aria-checked', active);
+        btn.style.borderColor = active ? '#5B5BD6' : '';
+        btn.style.background = active ? '#EEEEFF' : '';
+        const cv = btn.querySelector('canvas');
+        const ctx = cv.getContext('2d');
+        ctx.clearRect(0, 0, 100, 100);
+        ctx.fillStyle = colorInput.value;
+        SAMPLE.forEach((row, r) => [...row].forEach((c, i) => {
+          if (c === '1') drawModule(ctx, btn.dataset.shape, i * 20, r * 20, 20, 20);
+        }));
+      });
+    }
+
+    function regenerate() {
+      if (!resultArea.classList.contains('hidden')) generate();
+    }
+
+    btnCustom.addEventListener('click', () => {
+      const open = customPanel.classList.toggle('hidden') === false;
+      btnCustom.setAttribute('aria-expanded', open);
+      document.getElementById('custom-chevron').style.transform = open ? 'rotate(180deg)' : '';
+      regenerate();
+    });
+    colorInput.addEventListener('input', refreshShapes);
+    colorInput.addEventListener('change', regenerate);
+    document.getElementById('btn-reset').addEventListener('click', () => {
+      colorInput.value = DEFAULT_COLOR; shape = 'square';
+      refreshShapes(); regenerate();
+    });
+    refreshShapes();
+
+    function drawCustom(size) {
+      const qr = qrInstance._oQRCode;
+      const n = qr.getModuleCount();
+      const cell = size / n;
+      const canvas = document.createElement('canvas');
+      canvas.width = size; canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, size, size);
+      ctx.fillStyle = colorInput.value;
+      for (let row = 0; row < n; row++) {
+        for (let col = 0; col < n; col++) {
+          if (!qr.isDark(row, col)) continue;
+          const x = Math.round(col * cell), y = Math.round(row * cell);
+          drawModule(ctx, shape, x, y, Math.round((col + 1) * cell) - x, Math.round((row + 1) * cell) - y);
+        }
+      }
+      output.innerHTML = '';
+      output.appendChild(canvas);
+    }
+
+    // Character counter
+    input.addEventListener('input', () => {
+      charCount.textContent = `${input.value.length} caracteres`;
+    });
+
+    // Allow Enter (without Shift) to generate
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); generate(); }
+    });
+
+    btnGen.addEventListener('click', generate);
+    btnDl.addEventListener('click', download);
+
+    function showError(msg) {
+      errorMsg.textContent = msg;
+      errorMsg.classList.remove('hidden');
+    }
+
+    function clearError() {
+      errorMsg.textContent = '';
+      errorMsg.classList.add('hidden');
+    }
+
+    function generate() {
+      const text = input.value.trim();
+      if (!text) { showError('Escribe algo antes de generar el QR.'); return; }
+      clearError();
+
+      const size = parseInt(sizeSelect.value, 10);
+
+      // Destroy previous instance
+      if (qrInstance) { qrInstance.clear(); qrInstance = null; }
+      output.innerHTML = '';
+
+      const custom = !customPanel.classList.contains('hidden');
+
+      qrInstance = new QRCode(output, {
+        text,
+        width:  size,
+        height: size,
+        colorDark:  '#0F0F11',
+        colorLight: '#FFFFFF',
+        correctLevel: QRCode.CorrectLevel.H,
+      });
+
+      if (custom) drawCustom(size);
+
+      // Show result
+      resultArea.classList.remove('hidden');
+      resultArea.classList.add('visible');
+      resultArea.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function download() {
+      // QRCode.js renders a canvas (or img fallback)
+      const canvas = output.querySelector('canvas');
+      const img    = output.querySelector('img');
+
+      if (canvas) {
+        const link = document.createElement('a');
+        link.download = 'codigo-qr.png';
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+      } else if (img) {
+        // Fallback: draw img into a temporary canvas
+        const tmp = document.createElement('canvas');
+        const size = parseInt(sizeSelect.value, 10);
+        tmp.width = size; tmp.height = size;
+        const ctx = tmp.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        const link = document.createElement('a');
+        link.download = 'codigo-qr.png';
+        link.href = tmp.toDataURL('image/png');
+        link.click();
+      }
+    }
+  </script>
+</body>
+</html>
